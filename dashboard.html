@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>UARO Vending Tracker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    /* ── Reset & base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #1a1d2e;
+      border-bottom: 2px solid #6c63ff;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header h1 { font-size: 1.4rem; color: #a78bfa; letter-spacing: 0.5px; }
+    header .subtitle { font-size: 0.85rem; color: #64748b; margin-top: 2px; }
+    .header-stats {
+      margin-left: auto;
+      display: flex;
+      gap: 24px;
+      font-size: 0.82rem;
+      color: #94a3b8;
+    }
+    .header-stats span b { color: #a78bfa; }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 16px 32px 0;
+      border-bottom: 1px solid #1e2235;
+    }
+    .tab {
+      padding: 10px 24px;
+      border-radius: 8px 8px 0 0;
+      border: 1px solid transparent;
+      border-bottom: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: #64748b;
+      background: transparent;
+      transition: all 0.15s;
+    }
+    .tab:hover { color: #a78bfa; }
+    .tab.active {
+      background: #1a1d2e;
+      border-color: #1e2235;
+      color: #a78bfa;
+      font-weight: 600;
+    }
+    .alert-badge {
+      display: inline-block;
+      background: #ef4444;
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 1px 7px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* ── Main content ── */
+    .content {
+      padding: 24px 32px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ── Search & filters ── */
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      align-items: center;
+    }
+    .search-wrap {
+      position: relative;
+      flex: 1;
+      max-width: 420px;
+    }
+    .search-wrap input {
+      width: 100%;
+      padding: 10px 16px 10px 40px;
+      background: #1a1d2e;
+      border: 1px solid #2d3152;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-wrap input:focus { border-color: #6c63ff; }
+    .search-wrap .icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #475569;
+      font-size: 1rem;
+    }
+    .toolbar-info { font-size: 0.82rem; color: #475569; margin-left: auto; }
+
+    /* ── Table ── */
+    .table-wrap {
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #1e2235;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    thead tr { background: #1a1d2e; }
+    thead th {
+      padding: 12px 16px;
+      text-align: left;
+      color: #64748b;
+      font-weight: 600;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    thead th:hover { color: #a78bfa; }
+    thead th .sort-arrow { margin-left: 4px; opacity: 0.4; }
+    thead th.sorted .sort-arrow { opacity: 1; color: #a78bfa; }
+
+    tbody tr {
+      border-top: 1px solid #1a1d2e;
+      transition: background 0.1s;
+      cursor: pointer;
+    }
+    tbody tr:hover { background: #1a1d2e; }
+    tbody tr:nth-child(even) { background: #0d1020; }
+    tbody tr:nth-child(even):hover { background: #1a1d2e; }
+
+    td { padding: 11px 16px; }
+    .item-name { font-weight: 500; color: #e2e8f0; }
+    .item-cards { font-size: 0.75rem; color: #6c63ff; margin-top: 2px; }
+    .price { font-variant-numeric: tabular-nums; }
+    .price-current { color: #34d399; font-weight: 600; }
+    .price-avg { color: #94a3b8; }
+    .price-min { color: #60a5fa; }
+    .price-max { color: #f87171; }
+    .sellers { color: #64748b; font-size: 0.82rem; }
+    tr.unavailable { opacity: 0.4; }
+    tr.unavailable:hover { opacity: 0.7; }   
+    .days-badge {
+      display: inline-block;
+      background: #1e2235;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+
+    /* ── Pagination ── */
+    .pagination {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      margin-top: 20px;
+      font-size: 0.85rem;
+    }
+    .pagination button {
+      padding: 6px 14px;
+      background: #1a1d2e;
+      border: 1px solid #2d3152;
+      border-radius: 6px;
+      color: #94a3b8;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .pagination button:hover:not(:disabled) { border-color: #6c63ff; color: #a78bfa; }
+    .pagination button:disabled { opacity: 0.3; cursor: default; }
+    .pagination .page-info { color: #475569; padding: 0 8px; }
+
+    /* ── Modal (item detail / chart) ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #1a1d2e;
+      border: 1px solid #2d3152;
+      border-radius: 14px;
+      padding: 28px;
+      width: 90%;
+      max-width: 760px;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .modal h2 { font-size: 1.1rem; color: #a78bfa; margin-bottom: 4px; }
+    .modal .modal-cards { font-size: 0.8rem; color: #6c63ff; margin-bottom: 20px; }
+    .modal-close {
+      position: absolute;
+      top: 16px; right: 20px;
+      background: none;
+      border: none;
+      color: #64748b;
+      font-size: 1.4rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .modal-close:hover { color: #e2e8f0; }
+    .modal-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: #0f1117;
+      border: 1px solid #1e2235;
+      border-radius: 8px;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .stat-card:hover { border-color: #6c63ff; background: #13162a; }
+    .stat-card.active { border-color: #6c63ff; background: #13162a; box-shadow: 0 0 0 1px #6c63ff; }
+    .stat-card .label { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .stat-card .label::after { content: ' ↗'; font-size: 0.65rem; opacity: 0.4; }
+    .stat-card.active .label::after { content: ' ●'; opacity: 1; color: #6c63ff; }
+    .stat-card .value { font-size: 1rem; font-weight: 700; }
+    .chart-label { font-size: 0.75rem; color: #64748b; text-align: center; margin-bottom: 6px; }
+    .chart-wrap { position: relative; height: 280px; }
+
+    /* Current sellers section in modal */
+    .sellers-title { font-size: 0.78rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 10px; }
+    .sellers-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .sellers-table th { color: #475569; text-align: left; padding: 6px 10px; border-bottom: 1px solid #1e2235; }
+    .sellers-table td { padding: 7px 10px; border-bottom: 1px solid #0f1117; color: #94a3b8; }
+    .sellers-table tr:hover td { background: #0f1117; }
+
+    /* ── Alerts panel ── */
+    .alerts-header {
+      margin-bottom: 20px;
+    }
+    .alerts-header h2 { font-size: 1rem; color: #e2e8f0; margin-bottom: 4px; }
+    .alerts-header p { font-size: 0.82rem; color: #64748b; }
+    .alert-card {
+      background: #1a1d2e;
+      border: 1px solid #7f1d1d;
+      border-left: 4px solid #ef4444;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .alert-card:hover { border-color: #ef4444; }
+    .alert-card .alert-item { font-weight: 600; color: #e2e8f0; margin-bottom: 6px; }
+    .alert-card .alert-detail { font-size: 0.82rem; color: #94a3b8; display: flex; gap: 20px; flex-wrap: wrap; }
+    .alert-card .alert-pct { color: #ef4444; font-weight: 700; font-size: 0.9rem; }
+    .no-alerts {
+      text-align: center;
+      padding: 60px 20px;
+      color: #475569;
+    }
+    .no-alerts .icon { font-size: 2.5rem; margin-bottom: 12px; }
+    .no-alerts p { font-size: 0.9rem; }
+
+    /* ── Loading ── */
+    #loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 60vh;
+      gap: 16px;
+      color: #475569;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #1e2235;
+      border-top-color: #6c63ff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Error ── */
+    #error-msg {
+      display: none;
+      background: #1a1d2e;
+      border: 1px solid #7f1d1d;
+      border-radius: 10px;
+      padding: 24px;
+      margin: 40px auto;
+      max-width: 560px;
+      text-align: center;
+      color: #f87171;
+    }
+    #error-msg code { display: block; margin-top: 12px; font-size: 0.8rem; color: #64748b; background: #0f1117; padding: 10px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⚔️ UARO Vending Tracker</h1>
+    <div class="subtitle">Market price overview</div>
+  </div>
+  <div class="header-stats" id="header-stats"></div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('prices')">📋 All Items</button>
+  <button class="tab" onclick="switchTab('alerts')" id="alerts-tab">🚨 Alerts</button>
+</div>
+
+<div class="content">
+  <div id="loading">
+    <div class="spinner"></div>
+    <div>Loading prices.json…</div>
+  </div>
+  <div id="error-msg"></div>
+
+  <!-- ── Prices panel ── -->
+  <div class="panel" id="panel-prices">
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="icon">🔍</span>
+        <input type="text" id="search" placeholder="Search items…" oninput="onSearch()" />
+      </div>
+      <button id="toggle-unavailable" onclick="toggleUnavailable()" style="
+        padding: 9px 16px; background: #1a1d2e; border: 1px solid #2d3152;
+        border-radius: 8px; color: #64748b; cursor: pointer; font-size: 0.85rem;
+        transition: all 0.15s;">
+        Show unavailable items
+      </button>
+      <div class="toolbar-info" id="toolbar-info"></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortBy('name')"    >Item <span class="sort-arrow" id="arr-name"></span></th>
+            <th onclick="sortBy('id')"      >Item ID <span class="sort-arrow" id="arr-id"></span></th>
+            <th onclick="sortBy('current')" >Current Low Price <span class="sort-arrow" id="arr-current"></span></th>
+            <th onclick="sortBy('avg')"     >Average Price <span class="sort-arrow" id="arr-avg"></span></th>
+            <th onclick="sortBy('min')"     >All-time Min <span class="sort-arrow" id="arr-min"></span></th>
+            <th onclick="sortBy('max')"     >All-time Max <span class="sort-arrow" id="arr-max"></span></th>
+            <th onclick="sortBy('sellers')" >Sellers Today <span class="sort-arrow" id="arr-sellers"></span></th>
+            <th onclick="sortBy('days')"    >Days Tracked <span class="sort-arrow" id="arr-days"></span></th>
+            <th onclick="sortBy('seen')"    >Last Seen <span class="sort-arrow" id="arr-seen"></span></th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+  <!-- ── Alerts panel ── -->
+  <div class="panel" id="panel-alerts">
+    <div class="alerts-header">
+      <h2>Price Alerts</h2>
+      <p>Items currently listed at 75% or more below their average price, seen from multiple sellers for at least 7 days.</p>
+    </div>
+    <div id="alerts-list"></div>
+  </div>
+</div>
+
+<!-- ── Item detail modal ── -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    <h2 id="modal-title"></h2>
+    <div class="modal-cards" id="modal-cards"></div>
+    <div class="modal-stats" id="modal-stats"></div>
+    <div class="chart-label" id="chart-label">Showing: Daily Low Price</div>
+    <div class="chart-wrap">
+      <canvas id="price-chart"></canvas>
+    </div>
+    <div class="sellers-title">Current Listings</div>
+    <table class="sellers-table">
+      <thead><tr><th>Merchant</th><th>Shop</th><th>Map</th><th>Amount</th><th>Price</th></tr></thead>
+      <tbody id="modal-sellers"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// ── Data & state ─────────────────────────────────────────────────────────────
+
+let rawData   = {};       // full prices.json
+let tableRows = [];       // processed rows for the current view
+let filtered  = [];       // after search
+let sortKey   = 'name';
+let sortDir   = 1;        // 1 = asc, -1 = desc
+let page      = 1;
+const PAGE_SIZE = 50;
+let chartInstance = null;
+let showUnavailable = false;
+
+function toggleUnavailable() {
+  showUnavailable = !showUnavailable;
+  const btn = document.getElementById('toggle-unavailable');
+  btn.style.borderColor = showUnavailable ? '#6c63ff' : '#2d3152';
+  btn.style.color       = showUnavailable ? '#a78bfa' : '#64748b';
+  page = 1;
+  onSearch();
+}
+
+// ── Formatting ────────────────────────────────────────────────────────────────
+
+function fmtPrice(n) {
+  if (n == null || isNaN(n)) return '—';
+  return n.toLocaleString('en-US') + ' z';
+}
+
+function fmtPct(pct) {
+  return (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+}
+
+// ── Load data ────────────────────────────────────────────────────────────────
+
+async function loadData() {
+  try {
+    const resp = await fetch('prices.json');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    rawData = await resp.json();
+    processData();
+    renderHeader();
+    renderTable();
+    renderAlerts();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('panel-prices').classList.add('active');
+  } catch (e) {
+    document.getElementById('loading').style.display = 'none';
+    const el = document.getElementById('error-msg');
+    el.style.display = 'block';
+    el.innerHTML = `
+      <div style="font-size:1.8rem;margin-bottom:12px">⚠️</div>
+      <strong>Could not load prices.json</strong>
+      <p style="margin-top:8px;font-size:0.85rem;color:#94a3b8">
+        Make sure <code>prices.json</code> is in the same folder as this file,
+        and that you have run the scraper at least once.
+      </p>
+      <code>${e.message}</code>
+    `;
+  }
+}
+
+// ── Process raw data into table rows ─────────────────────────────────────────
+
+function processData() {
+  tableRows = [];
+
+  for (const [key, item] of Object.entries(rawData)) {
+    const history = item.history || [];
+    if (history.length === 0) continue;
+
+    // Separate base item name and cards from the key
+    let baseName = key, cards = '';
+    const bracketIdx = key.indexOf(' [');
+    if (bracketIdx !== -1) {
+      baseName = key.substring(0, bracketIdx);
+      cards    = key.substring(bracketIdx + 2, key.length - 1);
+    }
+
+    // Extract upgrade level for sorting (+7 Tidal Shoes → level 7, baseName "Tidal Shoes")
+    let upgradeLevel = 0;
+    const upgradeMatch = baseName.match(/^\+(\d+)\s+/);
+    if (upgradeMatch) {
+      upgradeLevel = parseInt(upgradeMatch[1]);
+      baseName = baseName.substring(upgradeMatch[0].length);
+    }
+
+    // Collect all prices across all days (lowest per day = "market price that day")
+    const dailyLow = history.map(day => ({
+      date:    day.date,
+      low:     Math.min(...day.entries.map(e => e.price)),
+      sellers: day.entries.length,
+      entries: day.entries,
+    }));
+
+    const allLows   = dailyLow.map(d => d.low);
+    const avgPrice  = Math.round(allLows.reduce((a, b) => a + b, 0) / allLows.length);
+    const minPrice  = Math.min(...allLows);
+    const maxPrice  = Math.max(...allLows);
+
+    const latest    = dailyLow[dailyLow.length - 1];
+    const currentLow = latest.low;
+    const sellersToday = latest.sellers;
+
+    // Find the most recent date in the data
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const lastSeenDate = history[history.length - 1].date;
+    const isAvailable = lastSeenDate === todayStr;
+
+    tableRows.push({
+      key, baseName, upgradeLevel, cards,
+      currentLow: isAvailable ? currentLow : null,
+      avgPrice, minPrice, maxPrice,
+      sellersToday: isAvailable ? sellersToday : 0,
+      daysTracked: history.length,
+      dailyLow,
+      history,
+      item_id: item.item_id,
+      isAvailable,
+      lastSeenDate,
+    });
+  }
+
+  filtered = tableRows.filter(r => r.isAvailable);
+  applySort();
+}
+
+// ── Header stats ─────────────────────────────────────────────────────────────
+
+function renderHeader() {
+  const dates = new Set();
+  let latestTimestamp = null;
+  for (const item of Object.values(rawData)) {
+    for (const h of item.history || []) {
+      dates.add(h.date);
+      if (h.timestamp && (!latestTimestamp || h.timestamp > latestTimestamp)) {
+        latestTimestamp = h.timestamp;
+      }
+    }
+  }
+  const latestDate = [...dates].sort().pop() || '—';
+  const latestTime = latestTimestamp
+    ? new Date(latestTimestamp).toLocaleTimeString('nl-NL', {
+        timeZone: 'Europe/Amsterdam',
+        hour: '2-digit', minute: '2-digit'
+      })
+    : '—';
+  document.getElementById('header-stats').innerHTML = `
+    <div><b>${tableRows.length.toLocaleString()}</b><br>items tracked</div>
+    <div><b>${[...dates].length}</b><br>days of data</div>
+    <div><b>${latestDate}</b><br><b>${latestTime}</b><br>last updated</div>
+  `;
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+
+function onSearch() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  const base = showUnavailable ? tableRows : tableRows.filter(r => r.isAvailable);
+  filtered = q
+    ? base.filter(r =>
+        r.key.toLowerCase().includes(q) ||
+        String(r.item_id ?? '').includes(q)
+      )
+    : [...base];
+  applySort();
+  page = 1;
+  renderTable();
+}
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+
+const sortKeys = {
+  name:    r => r.baseName.toLowerCase() + String(r.upgradeLevel ?? 0).padStart(3, '0'),
+  id:      r => r.item_id ?? 0,
+  current: r => r.currentLow,
+  avg:     r => r.avgPrice,
+  min:     r => r.minPrice,
+  max:     r => r.maxPrice,
+  sellers: r => r.sellersToday,
+  days:    r => r.daysTracked,
+  seen:    r => r.lastSeenDate,
+};
+
+function sortBy(key) {
+  if (sortKey === key) sortDir *= -1;
+  else { sortKey = key; sortDir = key === 'name' ? 1 : -1; }
+  applySort();
+  renderTable();
+}
+
+function applySort() {
+  const fn = sortKeys[sortKey] || sortKeys.name;
+  filtered.sort((a, b) => {
+    const av = fn(a), bv = fn(b);
+    return av < bv ? -sortDir : av > bv ? sortDir : 0;
+  });
+  // Update arrows
+  for (const k of Object.keys(sortKeys)) {
+    const el = document.getElementById(`arr-${k}`);
+    if (el) el.textContent = sortKey === k ? (sortDir === 1 ? '↑' : '↓') : '';
+    const th = el?.closest('th');
+    if (th) th.classList.toggle('sorted', sortKey === k);
+  }
+}
+
+// ── Table render ──────────────────────────────────────────────────────────────
+
+function renderTable() {
+  const start  = (page - 1) * PAGE_SIZE;
+  const slice  = filtered.slice(start, start + PAGE_SIZE);
+  const tbody  = document.getElementById('table-body');
+
+  tbody.innerHTML = slice.map(r => `
+    <tr onclick="openModal('${escKey(r.key)}')" class="${r.isAvailable ? '' : 'unavailable'}">
+      <td>
+        <div class="item-name">${r.baseName}</div>
+        ${r.upgradeLevel > 0 ? `<div class="item-cards">🔨 +${r.upgradeLevel}</div>` : ''}
+        ${r.cards ? `<div class="item-cards">🃏 ${r.cards}</div>` : ''}
+      </td>
+      <td class="sellers">${r.item_id ?? '—'}</td>
+      <td class="price price-current">${fmtPrice(r.currentLow)}</td>
+      <td class="price price-avg">${fmtPrice(r.avgPrice)}</td>
+      <td class="price price-min">${fmtPrice(r.minPrice)}</td>
+      <td class="price price-max">${fmtPrice(r.maxPrice)}</td>
+      <td class="sellers">${r.sellersToday}</td>
+      <td><span class="days-badge">${r.daysTracked}d</span></td>
+      <td class="sellers">${r.lastSeenDate}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('toolbar-info').textContent =
+    `Showing ${start + 1}–${Math.min(start + PAGE_SIZE, filtered.length)} of ${filtered.length} items`;
+
+  renderPagination();
+}
+
+function escKey(key) {
+  return key.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+function renderPagination() {
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  if (totalPages <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
+  document.getElementById('pagination').innerHTML = `
+    <button onclick="goPage(1)"        ${page===1?'disabled':''}>«</button>
+    <button onclick="goPage(${page-1})" ${page===1?'disabled':''}>‹</button>
+    <span class="page-info">Page ${page} of ${totalPages}</span>
+    <button onclick="goPage(${page+1})" ${page===totalPages?'disabled':''}>›</button>
+    <button onclick="goPage(${totalPages})" ${page===totalPages?'disabled':''}>»</button>
+  `;
+}
+
+function goPage(p) {
+  page = p;
+  renderTable();
+  window.scrollTo(0, 0);
+}
+
+// ── Alerts ────────────────────────────────────────────────────────────────────
+
+function renderAlerts() {
+  const alerts = tableRows.filter(r => {
+    if (!r.isAvailable) return false;
+    if (r.daysTracked < 7) return false;
+    // Check if latest day has multiple sellers
+    const latest = r.history[r.history.length - 1];
+    if (latest.entries.length < 2) return false;
+    // Check if current low is 75%+ below average
+    const dropPct = (r.avgPrice - r.currentLow) / r.avgPrice;
+    return dropPct >= 0.75;
+  });
+
+  const badge = document.getElementById('alerts-tab');
+  if (alerts.length > 0) {
+    badge.innerHTML = `🚨 Alerts <span class="alert-badge">${alerts.length}</span>`;
+  }
+
+  const list = document.getElementById('alerts-list');
+  if (alerts.length === 0) {
+    list.innerHTML = `
+      <div class="no-alerts">
+        <div class="icon">✅</div>
+        <p><strong>No alerts right now.</strong></p>
+        <p style="margin-top:8px">Alerts appear when an item is listed at 75%+ below its average price,<br>
+        by multiple sellers, after at least 7 days of tracking.</p>
+      </div>`;
+    return;
+  }
+
+  alerts.sort((a, b) => {
+    const dropA = (a.avgPrice - a.currentLow) / a.avgPrice;
+    const dropB = (b.avgPrice - b.currentLow) / b.avgPrice;
+    return dropB - dropA;
+  });
+
+  list.innerHTML = alerts.map(r => {
+    const dropPct = ((r.avgPrice - r.currentLow) / r.avgPrice * 100).toFixed(1);
+    return `
+      <div class="alert-card" onclick="openModal('${escKey(r.key)}')">
+        <div class="alert-item">${r.key}</div>
+        <div class="alert-detail">
+          <span>Current low: <strong class="price-current">${fmtPrice(r.currentLow)}</strong></span>
+          <span>Average: <strong class="price-avg">${fmtPrice(r.avgPrice)}</strong></span>
+          <span class="alert-pct">▼ ${dropPct}% below average</span>
+          <span>${r.daysTracked} days tracked</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+
+let activeModalRow = null; // keep reference for chart switching
+
+const chartModes = {
+  low: {
+    label: 'Daily Low Price',
+    color: '#6c63ff',
+    bg:    'rgba(108,99,255,0.1)',
+    getData: r => r.dailyLow.map(d => d.low),
+  },
+  avg: {
+    label: 'Daily Average Price',
+    color: '#f59e0b',
+    bg:    'rgba(245,158,11,0.1)',
+    getData: r => r.history.map(day => {
+      const prices = day.entries.map(e => e.price);
+      return Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+    }),
+  },
+  min: {
+    label: 'Daily Minimum Price',
+    color: '#60a5fa',
+    bg:    'rgba(96,165,250,0.1)',
+    getData: r => r.dailyLow.map(d => d.low), // same as low (min per day)
+  },
+  max: {
+    label: 'Daily Maximum Price',
+    color: '#f87171',
+    bg:    'rgba(248,113,113,0.1)',
+    getData: r => r.history.map(day => Math.max(...day.entries.map(e => e.price))),
+  },
+};
+
+function switchChart(mode) {
+  if (!activeModalRow) return;
+  const r   = activeModalRow;
+  const cfg = chartModes[mode];
+
+  // Update active stat card highlight
+  document.querySelectorAll('.stat-card').forEach(el => {
+    el.classList.toggle('active', el.dataset.mode === mode);
+  });
+
+  document.getElementById('chart-label').textContent = `Showing: ${cfg.label}`;
+
+  const dates = r.history.map(d => d.date);
+  const data  = cfg.getData(r);
+
+  if (chartInstance) {
+    chartInstance.data.labels              = dates;
+    chartInstance.data.datasets[0].data   = data;
+    chartInstance.data.datasets[0].label  = cfg.label;
+    chartInstance.data.datasets[0].borderColor      = cfg.color;
+    chartInstance.data.datasets[0].backgroundColor  = cfg.bg;
+    chartInstance.data.datasets[0].pointBackgroundColor = cfg.color;
+    chartInstance.update();
+  }
+}
+
+function buildChart(r) {
+  if (chartInstance) chartInstance.destroy();
+  const ctx = document.getElementById('price-chart').getContext('2d');
+  const cfg = chartModes.low;
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: r.history.map(d => d.date),
+      datasets: [{
+        label: cfg.label,
+        data:  cfg.getData(r),
+        borderColor: cfg.color,
+        backgroundColor: cfg.bg,
+        pointBackgroundColor: cfg.color,
+        pointRadius: 4,
+        tension: 0.3,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => fmtPrice(ctx.parsed.y) } }
+      },
+      scales: {
+        x: { ticks: { color: '#64748b' }, grid: { color: '#1e2235' } },
+        y: {
+          ticks: { color: '#64748b', callback: v => fmtPrice(v) },
+          grid:  { color: '#1e2235' }
+        }
+      }
+    }
+  });
+}
+
+function openModal(key) {
+  const r = tableRows.find(x => x.key === key);
+  if (!r) return;
+  activeModalRow = r;
+
+  document.getElementById('modal-title').textContent = r.baseName;
+  document.getElementById('modal-cards').textContent = r.cards ? `🃏 Cards: ${r.cards}` : 'No cards';
+  document.getElementById('chart-label').textContent = 'Showing: Daily Low Price';
+
+  // Stat cards — each is clickable and switches the chart
+  document.getElementById('modal-stats').innerHTML = `
+    <div class="stat-card active" data-mode="low" onclick="switchChart('low')">
+      <div class="label">Current Low</div>
+      <div class="value price-current">${fmtPrice(r.currentLow)}</div>
+    </div>
+    <div class="stat-card" data-mode="avg" onclick="switchChart('avg')">
+      <div class="label">Average (all days)</div>
+      <div class="value price-avg">${fmtPrice(r.avgPrice)}</div>
+    </div>
+    <div class="stat-card" data-mode="min" onclick="switchChart('min')">
+      <div class="label">All-time Min</div>
+      <div class="value price-min">${fmtPrice(r.minPrice)}</div>
+    </div>
+    <div class="stat-card" data-mode="max" onclick="switchChart('max')">
+      <div class="label">All-time Max</div>
+      <div class="value price-max">${fmtPrice(r.maxPrice)}</div>
+    </div>
+  `;
+
+  buildChart(r);
+
+  // Current sellers
+  const latest = r.history[r.history.length - 1];
+  const sorted = [...latest.entries].sort((a, b) => a.price - b.price);
+  document.getElementById('modal-sellers').innerHTML = sorted.map(e => `
+    <tr>
+      <td>${e.merchant}</td>
+      <td>${e.shop}</td>
+      <td>${e.map} (${e.x}, ${e.y})</td>
+      <td>${e.amount}</td>
+      <td class="price price-current">${fmtPrice(e.price)}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('modal-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modal-overlay')) closeModalDirect();
+}
+function closeModalDirect() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['prices','alerts'][i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`panel-${name}`).classList.add('active');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
