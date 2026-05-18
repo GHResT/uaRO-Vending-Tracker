@@ -711,7 +711,7 @@ function renderAlerts() {
     const dropPct = ((r.avgPrice - r.currentLow) / r.avgPrice * 100).toFixed(1);
     return `
       <div class="alert-card" onclick="openModal('${escKey(r.key)}')">
-        <div class="alert-item">${r.key}</div>
+        <div class="alert-item">${r.key} <span style="font-weight: normal; font-style: italic; color: #64748b;">- ${r.item_id ?? '—'}</span></div>
         <div class="alert-detail">
           <span>Current low: <strong class="price-current">${fmtPrice(r.currentLow)}</strong></span>
           <span>Average: <strong class="price-avg">${fmtPrice(r.avgPrice)}</strong></span>
