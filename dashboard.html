@@ -366,6 +366,7 @@
             <th onclick="sortBy('name')"    >Item <span class="sort-arrow" id="arr-name"></span></th>
             <th onclick="sortBy('id')"      >Item ID <span class="sort-arrow" id="arr-id"></span></th>
             <th onclick="sortBy('current')" >Current Low Price <span class="sort-arrow" id="arr-current"></span></th>
+            <th onclick="sortBy('med')"     >Median Price <span class="sort-arrow" id="arr-med"></span></th>
             <th onclick="sortBy('avg')"     >Average Price <span class="sort-arrow" id="arr-avg"></span></th>
             <th onclick="sortBy('min')"     >All-time Min <span class="sort-arrow" id="arr-min"></span></th>
             <th onclick="sortBy('max')"     >All-time Max <span class="sort-arrow" id="arr-max"></span></th>
@@ -384,7 +385,7 @@
   <div class="panel" id="panel-alerts">
     <div class="alerts-header">
       <h2>Price Alerts</h2>
-      <p>Items currently listed at 75% or more below their average price, seen from multiple sellers for at least 7 days.</p>
+      <p>Items currently listed at 75% or more below their median price, seen from multiple sellers for at least 7 days.</p>
     </div>
     <div id="alerts-list"></div>
   </div>
@@ -508,6 +509,11 @@ function processData() {
     const avgPrice  = Math.round(allLows.reduce((a, b) => a + b, 0) / allLows.length);
     const minPrice  = Math.min(...allLows);
     const maxPrice  = Math.max(...allLows);
+    const sorted    = [...allLows].sort((a, b) => a - b);
+    const mid       = Math.floor(sorted.length / 2);
+    const medPrice  = sorted.length % 2 !== 0
+      ? sorted[mid]
+      : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 
     const latest    = dailyLow[dailyLow.length - 1];
     const currentLow = latest.low;
@@ -521,7 +527,7 @@ function processData() {
     tableRows.push({
       key, baseName, upgradeLevel, cards,
       currentLow: isAvailable ? currentLow : null,
-      avgPrice, minPrice, maxPrice,
+      avgPrice, medPrice, minPrice, maxPrice,
       sellersToday: isAvailable ? sellersToday : 0,
       daysTracked: history.length,
       dailyLow,
@@ -585,6 +591,7 @@ const sortKeys = {
   name:    r => r.baseName.toLowerCase() + String(r.upgradeLevel ?? 0).padStart(3, '0'),
   id:      r => r.item_id ?? 0,
   current: r => r.currentLow,
+  med:     r => r.medPrice,
   avg:     r => r.avgPrice,
   min:     r => r.minPrice,
   max:     r => r.maxPrice,
@@ -631,7 +638,8 @@ function renderTable() {
       </td>
       <td class="sellers">${r.item_id ?? '—'}</td>
       <td class="price price-current">${fmtPrice(r.currentLow)}</td>
-      <td class="price price-avg">${fmtPrice(r.avgPrice)}</td>
+      <td class="price price-avg">${fmtPrice(r.medPrice)}</td>
+      <td class="price" style="color: #94a3b8; opacity: 0.7;">${fmtPrice(r.avgPrice)}</td>
       <td class="price price-min">${fmtPrice(r.minPrice)}</td>
       <td class="price price-max">${fmtPrice(r.maxPrice)}</td>
       <td class="sellers">${r.sellersToday}</td>
@@ -680,7 +688,7 @@ function renderAlerts() {
     const latest = r.history[r.history.length - 1];
     if (latest.entries.length < 2) return false;
     // Check if current low is 75%+ below average
-    const dropPct = (r.avgPrice - r.currentLow) / r.avgPrice;
+    const dropPct = (r.medPrice - r.currentLow) / r.medPrice;
     return dropPct >= 0.75;
   });
 
@@ -708,14 +716,14 @@ function renderAlerts() {
   });
 
   list.innerHTML = alerts.map(r => {
-    const dropPct = ((r.avgPrice - r.currentLow) / r.avgPrice * 100).toFixed(1);
+    const dropPct = ((r.medPrice - r.currentLow) / r.medPrice * 100).toFixed(1);
     return `
       <div class="alert-card" onclick="openModal('${escKey(r.key)}')">
         <div class="alert-item">${r.key} <span style="font-weight: normal; font-style: italic; color: #64748b;">- ${r.item_id ?? '—'}</span></div>
         <div class="alert-detail">
           <span>Current low: <strong class="price-current">${fmtPrice(r.currentLow)}</strong></span>
-          <span>Average: <strong class="price-avg">${fmtPrice(r.avgPrice)}</strong></span>
-          <span class="alert-pct">▼ ${dropPct}% below average</span>
+          <span>Median: <strong class="price-avg">${fmtPrice(r.medPrice)}</strong></span>
+          <span class="alert-pct">▼ ${dropPct}% below median</span>
           <span>${r.daysTracked} days tracked</span>
         </div>
       </div>`;
@@ -732,6 +740,18 @@ const chartModes = {
     color: '#6c63ff',
     bg:    'rgba(108,99,255,0.1)',
     getData: r => r.dailyLow.map(d => d.low),
+  },
+  med: {
+    label: 'Daily Median Price',
+    color: '#34d399',
+    bg:    'rgba(52,211,153,0.1)',
+    getData: r => r.history.map(day => {
+      const prices = [...day.entries.map(e => e.price)].sort((a, b) => a - b);
+      const mid = Math.floor(prices.length / 2);
+      return prices.length % 2 !== 0
+        ? prices[mid]
+        : Math.round((prices[mid - 1] + prices[mid]) / 2);
+    }),
   },
   avg: {
     label: 'Daily Average Price',
@@ -785,7 +805,7 @@ function switchChart(mode) {
 function buildChart(r) {
   if (chartInstance) chartInstance.destroy();
   const ctx = document.getElementById('price-chart').getContext('2d');
-  const cfg = chartModes.low;
+  const cfg = chartModes.med;
   chartInstance = new Chart(ctx, {
     type: 'line',
     data: {
@@ -826,17 +846,21 @@ function openModal(key) {
 
   document.getElementById('modal-title').textContent = r.baseName;
   document.getElementById('modal-cards').textContent = r.cards ? `🃏 Cards: ${r.cards}` : 'No cards';
-  document.getElementById('chart-label').textContent = 'Showing: Daily Low Price';
+  document.getElementById('chart-label').textContent = 'Showing: Daily Median Price';
 
   // Stat cards — each is clickable and switches the chart
   document.getElementById('modal-stats').innerHTML = `
-    <div class="stat-card active" data-mode="low" onclick="switchChart('low')">
+    <div class="stat-card" data-mode="low" onclick="switchChart('low')">
       <div class="label">Current Low</div>
       <div class="value price-current">${fmtPrice(r.currentLow)}</div>
     </div>
+    <div class="stat-card active" data-mode="med" onclick="switchChart('med')">
+      <div class="label">Median Price</div>
+      <div class="value price-avg">${fmtPrice(r.medPrice)}</div>
+    </div>
     <div class="stat-card" data-mode="avg" onclick="switchChart('avg')">
-      <div class="label">Average (all days)</div>
-      <div class="value price-avg">${fmtPrice(r.avgPrice)}</div>
+      <div class="label">Average Price</div>
+      <div class="value" style="color: #94a3b8;">${fmtPrice(r.avgPrice)}</div>
     </div>
     <div class="stat-card" data-mode="min" onclick="switchChart('min')">
       <div class="label">All-time Min</div>
